@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Dashboard</title>
+<style>
+  :root { --bg:#0F172A; --graph:#1E293B; --acc:#22D3EE; --cream:#F8FAFC; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; }
+  body { font-family:"Roboto","Segoe UI",sans-serif; color:var(--cream); }
+
+  /* stała scena 1920x1080 skalowana do okna */
+  #stage { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; overflow:hidden; background:var(--bg); }
+  #bg { position:absolute; inset:0; background:radial-gradient(ellipse at 78% 30%, #1E3A5F 0%, #0F172A 62%) center/cover no-repeat; }
+  #shade { position:absolute; inset:0;
+    background:
+      linear-gradient(90deg, rgba(15,23,42,.88) 0%, rgba(15,23,42,.55) 38%, rgba(15,23,42,0) 70%),
+      linear-gradient(0deg, rgba(15,23,42,.95) 0%, rgba(15,23,42,.7) 22%, rgba(15,23,42,0) 52%); }
+
+  #info { position:absolute; left:112px; top:70px; }
+  #clock { font-size:230px; line-height:1; font-weight:100; letter-spacing:-4px; color:var(--cream); font-variant-numeric:tabular-nums; }
+  #date { margin-top:6px; font-size:44px; font-weight:300; color:var(--cream); opacity:.85; }
+  #weather { margin-top:44px; display:flex; align-items:center; gap:28px; }
+  #wicon { width:96px; height:96px; flex:none; }
+  #wicon svg { width:96px; height:96px; display:block; }
+  #temp { font-size:84px; font-weight:200; line-height:1; }
+  #wdesc { font-size:34px; font-weight:300; line-height:1.25; }
+  #wdesc small { display:block; font-size:28px; opacity:.6; }
+
+  /* kafle */
+  #row { position:absolute; left:112px; right:112px; bottom:96px; display:flex; gap:32px; }
+  .tile { position:relative; width:210px; height:230px; flex:none; border-radius:40px;
+    background:rgba(30,41,59,.82); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    transition:transform .15s ease-out; outline:none; }
+  .tile::after { content:""; position:absolute; inset:0; border-radius:40px; border:5px solid var(--acc); opacity:0; transition:opacity .12s; pointer-events:none; }
+  .tile:focus { transform:scale(1.06); }
+  .tile:focus::after { opacity:1; }
+  .tile img { width:128px; height:128px; border-radius:28px; object-fit:contain; }
+  .tile .ph { width:128px; height:128px; border-radius:28px; background:var(--acc); color:var(--bg); font-size:64px; font-weight:500; display:flex; align-items:center; justify-content:center; }
+  .tile .name { font-size:25px; font-weight:400; max-width:190px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile.all .name { white-space:normal; line-height:1.15; max-width:150px; }
+  .tile.all .glyph { width:128px; height:128px; display:grid; grid-template:repeat(3,1fr)/repeat(3,1fr); gap:12px; padding:14px; }
+  .tile.all .glyph i { background:var(--cream); border-radius:8px; opacity:.9; }
+
+  /* siatka wszystkich aplikacji */
+  #apps { position:absolute; inset:0; background:#0F172A; display:none; }
+  #apps.on { display:block; }
+  #apps h1 { position:absolute; left:112px; top:56px; font-size:56px; font-weight:200; }
+  #apps h1 span { color:var(--acc); }
+  #grid { position:absolute; left:0; right:0; top:150px; bottom:0; overflow:hidden; padding:30px 112px 0 112px; }
+  #gridin { display:grid; grid-template-columns:repeat(7,210px); gap:32px 32px; padding-bottom:60px; }
+  #gridin .tile { width:210px; height:230px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div><div id="shade"></div>
+
+  <div id="info">
+    <div id="clock">--:--</div>
+    <div id="date">&nbsp;</div>
+    <div id="weather">
+      <div id="wicon"></div>
+      <div id="temp">--°</div>
+      <div id="wdesc"><span id="wtext">…</span><small id="wmm"></small></div>
+    </div>
+  </div>
+
+  <div id="row"></div>
+
+  <div id="apps">
+    <h1><span id="alltitle"></span> <span id="cnt"></span></h1>
+    <div id="grid"><div id="gridin"></div></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  "use strict";
+  var A = window.Android;
+  var stage = document.getElementById("stage");
+
+  /* ---------- config (see config.js) ---------- */
+  var C = window.CONFIG || {};
+  var LANG = ((C.lang && C.lang !== "auto") ? C.lang : (navigator.language || "en")).slice(0, 2) === "pl" ? "pl" : "en";
+  var TXT = {
+    en: { all: "All apps", loading: "…", today: "today", asOf: "as of", sun: "Sunny", clear: "Clear", mostlySun: "Mostly sunny",
+          mostlyClear: "Mostly clear", partly: "Partly cloudy", overcast: "Overcast", fog: "Fog", drizzle: "Drizzle", rain: "Rain",
+          snow: "Snow", showers: "Showers", snowShowers: "Snow showers", storm: "Thunderstorm", cloudy: "Cloudy" },
+    pl: { all: "Wszystkie aplikacje", loading: "…", today: "dziś", asOf: "stan z", sun: "Słonecznie", clear: "Bezchmurnie",
+          mostlySun: "Przeważnie słonecznie", mostlyClear: "Przeważnie bezchmurnie", partly: "Częściowe zachmurzenie",
+          overcast: "Pochmurno", fog: "Mgła", drizzle: "Mżawka", rain: "Deszcz", snow: "Śnieg", showers: "Przelotny deszcz",
+          snowShowers: "Przelotny śnieg", storm: "Burza", cloudy: "Zachmurzenie" }
+  }[LANG];
+  var LOCALE = LANG === "pl" ? "pl-PL" : "en-GB";
+  var W = C.weather || { lat: 51.51, lon: -0.13, timezone: "Europe/London", label: "London", unit: "celsius" };
+  var FAV = C.apps || [];
+  if (C.wallpaper) document.getElementById("bg").style.backgroundImage = "url(" + C.wallpaper + ")";
+  document.getElementById("alltitle").textContent = TXT.all;
+  document.getElementById("wtext").textContent = TXT.loading;
+
+  /* ---------- skalowanie sceny ---------- */
+  function fit() {
+    var k = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    stage.style.transform = "scale(" + k + ")";
+    stage.style.left = Math.round((window.innerWidth - 1920 * k) / 2) + "px";
+    stage.style.top = Math.round((window.innerHeight - 1080 * k) / 2) + "px";
+  }
+  window.addEventListener("resize", fit); fit();
+
+  /* ---------- zegar i data ---------- */
+  function p2(n) { return (n < 10 ? "0" : "") + n; }
+  var lastClock = "";
+  function tick() {
+    var d = new Date(), t = p2(d.getHours()) + ":" + p2(d.getMinutes());
+    if (t !== lastClock) {
+      lastClock = t;
+      document.getElementById("clock").textContent = t;
+      document.getElementById("date").textContent = d.toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long" });
+    }
+  }
+  tick(); setInterval(tick, 1000);
+
+  /* ---------- pogoda ---------- */
+  var URL_W = "https://api.open-meteo.com/v1/forecast?latitude=" + W.lat + "&longitude=" + W.lon + "&temperature_unit=" + (W.unit || "celsius") +
+    "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=" + encodeURIComponent(W.timezone || "auto");
+  var KEY = "dash.weather";
+  var S = 'viewBox="0 0 96 96" fill="none" stroke="#F8FAFC" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"';
+  var CLOUD = '<path d="M28 70h40a14 14 0 0 0 2-27.8A20 20 0 0 0 31 38a16 16 0 0 0-3 32z" fill="#1E293B"/>';
+  var SUN = '<circle cx="48" cy="48" r="15" stroke="#22D3EE" fill="#22D3EE" fill-opacity=".25"/>' +
+    '<path stroke="#22D3EE" d="M48 15v8M48 73v8M15 48h8M73 48h8M24.7 24.7l5.7 5.7M65.6 65.6l5.7 5.7M24.7 71.3l5.7-5.7M65.6 30.4l5.7-5.7"/>';
+  var MOON = '<path d="M62 62A26 26 0 0 1 36 22a26 26 0 1 0 38 40z" fill="#1E293B"/>';
+  var ICONS = {
+    sun: SUN,
+    moon: MOON,
+    pcloud: '<g transform="translate(-4 -6) scale(.7)">' + SUN + '</g><g transform="translate(14 14) scale(.8)">' + CLOUD + '</g>',
+    pcloudn: '<g transform="translate(-2 -8) scale(.7)">' + MOON + '</g><g transform="translate(14 14) scale(.8)">' + CLOUD + '</g>',
+    cloud: CLOUD,
+    fog: '<path d="M20 36h56M14 50h60M22 64h56M30 78h40"/>',
+    rain: CLOUD + '<path stroke="#22D3EE" d="M34 78l-4 10M50 78l-4 10M66 78l-4 10"/>',
+    snow: CLOUD + '<path d="M34 80v.1M50 84v.1M66 80v.1M42 90v.1M58 90v.1" stroke-width="7"/>',
+    storm: CLOUD + '<path stroke="#22D3EE" fill="#22D3EE" fill-opacity=".3" d="M52 66L42 82h10l-5 12 16-18H53z"/>'
+  };
+  function wmo(code, day) {
+    if (code === 0) return day ? ["sun", TXT.sun] : ["moon", TXT.clear];
+    if (code === 1) return day ? ["sun", TXT.mostlySun] : ["moon", TXT.mostlyClear];
+    if (code === 2) return day ? ["pcloud", TXT.partly] : ["pcloudn", TXT.partly];
+    if (code === 3) return ["cloud", TXT.overcast];
+    if (code === 45 || code === 48) return ["fog", TXT.fog];
+    if (code >= 51 && code <= 57) return ["rain", TXT.drizzle];
+    if (code >= 61 && code <= 67) return ["rain", TXT.rain];
+    if (code >= 71 && code <= 77) return ["snow", TXT.snow];
+    if (code >= 80 && code <= 82) return ["rain", TXT.showers];
+    if (code === 85 || code === 86) return ["snow", TXT.snowShowers];
+    if (code >= 95) return ["storm", TXT.storm];
+    return ["cloud", TXT.cloudy];
+  }
+  function renderWeather(w, stale) {
+    var m = wmo(w.code, w.day);
+    document.getElementById("wicon").innerHTML = "<svg " + S + ">" + ICONS[m[0]] + "</svg>";
+    document.getElementById("temp").textContent = Math.round(w.temp) + ((W.unit === "fahrenheit") ? "°F" : "°C");
+    document.getElementById("wtext").textContent = (W.label ? W.label + ", " : "") + m[1].toLowerCase();
+    var mm = TXT.today + " " + Math.round(w.min) + "° / " + Math.round(w.max) + "°";
+    if (stale) { var d = new Date(w.ts); mm += "  ·  " + TXT.asOf + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()); }
+    document.getElementById("wmm").textContent = mm;
+  }
+  function loadWeather() {
+    fetch(URL_W).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (j) {
+      var w = { temp: j.current.temperature_2m, code: j.current.weather_code, day: j.current.is_day === 1,
+        min: j.daily.temperature_2m_min[0], max: j.daily.temperature_2m_max[0], ts: Date.now() };
+      try { localStorage.setItem(KEY, JSON.stringify(w)); } catch (e) {}
+      renderWeather(w, false);
+    }).catch(function () {
+      try { var w = JSON.parse(localStorage.getItem(KEY)); if (w) renderWeather(w, true); } catch (e) {}
+    });
+  }
+  try { var c = JSON.parse(localStorage.getItem(KEY)); if (c) renderWeather(c, true); } catch (e) {}
+  loadWeather(); setInterval(loadWeather, 15 * 60 * 1000);
+
+  /* ---------- kafle ---------- */
+  var row = document.getElementById("row");
+  var gridin = document.getElementById("gridin");
+  var apps = document.getElementById("apps");
+  var iconCache = {};
+
+  function iconOf(pkg) {
+    if (pkg in iconCache) return iconCache[pkg];
+    var s = "";
+    try { s = A ? A.icon(pkg) : ""; } catch (e) {}
+    return (iconCache[pkg] = s ? "data:image/png;base64," + s : "");
+  }
+  function mkTile(label, pkg) {
+    var t = document.createElement("div");
+    t.className = "tile"; t.tabIndex = 0; t.dataset.pkg = pkg;
+    t.innerHTML = '<div class="ph">' + label.charAt(0).toUpperCase() + '</div><div class="name"></div>';
+    t.lastChild.textContent = label;
+    return t;
+  }
+  function fillIcon(t, pkg) {
+    var src = iconOf(pkg);
+    if (!src) return;
+    var img = new Image(); img.alt = ""; img.src = src;
+    t.replaceChild(img, t.firstChild);
+  }
+  function allTile() {
+    var t = document.createElement("div");
+    t.className = "tile all"; t.tabIndex = 0; t.dataset.all = "1";
+    t.innerHTML = '<div class="glyph">' + new Array(10).join("<i></i>") + '</div><div class="name">' + TXT.all + '</div>';
+    return t;
+  }
+
+  var installed = null;
+  function getApps() {
+    if (installed) return installed;
+    try { installed = JSON.parse(A.listApps()); } catch (e) { installed = []; }
+    return installed;
+  }
+
+  function buildRow() {
+    var set = {}; getApps().forEach(function (a) { set[a.package] = 1; });
+    row.innerHTML = "";
+    FAV.forEach(function (f) {
+      if (A && !set[f[1]]) return; // skip apps that are not installed
+      var t = mkTile(f[0], f[1]); row.appendChild(t); fillIcon(t, f[1]);
+    });
+    row.appendChild(allTile());
+  }
+
+  function buildGrid() {
+    var list = getApps();
+    gridin.innerHTML = "";
+    document.getElementById("cnt").textContent = "(" + list.length + ")";
+    var i = 0;
+    list.forEach(function (a) { gridin.appendChild(mkTile(a.label, a.package)); });
+    // ikony leniwie, po kawałku, żeby nie blokować UI
+    var tiles = gridin.children;
+    (function next() {
+      var end = Math.min(i + 6, tiles.length);
+      for (; i < end; i++) fillIcon(tiles[i], tiles[i].dataset.pkg);
+      if (i < tiles.length) setTimeout(next, 16);
+    })();
+  }
+
+  function openApps() {
+    buildGrid(); apps.classList.add("on");
+    document.getElementById("grid").scrollTop = 0;
+    var f = gridin.firstElementChild; if (f) f.focus();
+  }
+  function closeApps() {
+    apps.classList.remove("on");
+    var all = row.querySelector(".all"); (all || row.firstElementChild).focus();
+  }
+  function activate(t) {
+    if (!t) return;
+    if (t.dataset.all) { openApps(); return; }
+    if (A && t.dataset.pkg) A.launch(t.dataset.pkg);
+  }
+
+  /* ---------- nawigacja pilotem (nawigacja przestrzenna) ---------- */
+  function scopeTiles() {
+    var root = apps.classList.contains("on") ? gridin : row;
+    return Array.prototype.slice.call(root.children);
+  }
+  function move(dir) {
+    var cur = document.activeElement, list = scopeTiles();
+    if (!cur || list.indexOf(cur) < 0) { if (list[0]) list[0].focus(); return; }
+    var c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+    var best = null, bs = 1e12;
+    list.forEach(function (t) {
+      if (t === cur) return;
+      var r = t.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      var dx = x - cx, dy = y - cy, main, cross;
+      if (dir === "L") { main = -dx; cross = Math.abs(dy); }
+      else if (dir === "R") { main = dx; cross = Math.abs(dy); }
+      else if (dir === "U") { main = -dy; cross = Math.abs(dx); }
+      else { main = dy; cross = Math.abs(dx); }
+      if (main <= 4) return;
+      var s = main + cross * 3;
+      if (s < bs) { bs = s; best = t; }
+    });
+    if (best) {
+      best.focus();
+      if (apps.classList.contains("on")) {
+        var g = document.getElementById("grid"), gr = g.getBoundingClientRect(), br = best.getBoundingClientRect();
+        var k = br.height / 230; // bieżąca skala sceny
+        if (br.top < gr.top + 10 * k) g.scrollTop -= (gr.top + 10 * k - br.top) / k + 20;
+        else if (br.bottom > gr.bottom - 20 * k) g.scrollTop += (br.bottom - gr.bottom + 20 * k) / k + 40;
+      }
+    }
+  }
+  document.addEventListener("keydown", function (e) {
+    var k = e.keyCode;
+    if (k === 37) move("L"); else if (k === 39) move("R");
+    else if (k === 38) move("U"); else if (k === 40) move("D");
+    else if (k === 13 || k === 23) activate(document.activeElement);
+    else if (k === 27 || k === 4) { onBack(); }
+    else return;
+    e.preventDefault();
+  });
+
+  /* ---------- wywoływane z Activity ---------- */
+  window.onBack = function () { if (apps.classList.contains("on")) closeApps(); };
+  window.goHome = function () {
+    apps.classList.remove("on");
+    if (row.firstElementChild) row.firstElementChild.focus();
+    tick();
+  };
+  window.onShow = function () { tick(); loadWeather(); };
+
+  /* ---------- start ---------- */
+  buildRow();
+  if (row.firstElementChild) row.firstElementChild.focus();
+})();
+</script>
+</body>
+</html>

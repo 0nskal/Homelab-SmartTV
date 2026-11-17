@@ -1,0 +1,13 @@
+# Backups and dumps of real devices: private, never commit
+devices/
+backups/
+*.apk
+# Local tooling downloaded by scripts
+tools/
+launcher/build/
+launcher/tools/
+__pycache__/
+*.pyc
+.venv/
+# Screenshots live on the pr-screenshots branch, not on main
+pr-screenshots/

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Script runs
+        run: |
+          python tv.py --help
+          python tv.py --list-profiles --lang pl
+      - name: brands.json is valid
+        run: python -c "import json; json.load(open('data/brands.json', encoding='utf-8'))"
+
+  title:
+    name: title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR title is Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! echo "$TITLE" | grep -Eq '^(feat|fix|docs|chore|refactor|test|ci|build|perf|style)(\([a-z0-9._-]+\))?!?: .+'; then
+            echo "PR title must look like 'feat: add something' (Conventional Commits). Got: $TITLE"
+            exit 1
+          fi
+
+  screenshots:
+    name: screenshots
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR has screenshots or says "No UI change"
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if echo "$BODY" | grep -Eq '!\[[^]]*\]\(https?://[^)]+\)|<img [^>]*src=|No UI change'; then
+            echo "ok"
+          else
+            echo "Add screenshots (raw URLs from the pr-screenshots branch) or write 'No UI change' in the PR description."
+            exit 1
+          fi

@@ -1,0 +1,33 @@
+{
+  "_note_en": "Brand/device-type profiles. 'adb' = can be controlled over ADB via Wi-Fi (true, false or \"partial\"). 'bloat' = regex of packages to review (NOTHING is disabled without your explicit command).",
+  "_note_pl": "Profile marek/typow urzadzen. 'adb' = czy da sie sterowac przez ADB po Wi-Fi (true, false albo \"partial\"). 'bloat' = regex pakietow do przejrzenia (NIC nie jest wylaczane bez Twojego jawnego polecenia).",
+  "profiles": {
+    "sony":     {"aliases": ["bravia"], "os": "Google TV / Android TV", "adb": true,
+                 "bloat": "samba|idd|demosupport|sonyselect|qterics|sonyericsson\\.idd"},
+    "philips":  {"aliases": ["tp vision", "ambilight"], "os": "Google TV / Android TV", "adb": true,
+                 "bloat": "tpvision|philips\\.(demo|vod)|partner|promo"},
+    "tcl":      {"aliases": [], "os": "Google TV / Roku TV", "adb": true,
+                 "bloat": "tcl\\.(ad|promo|market|demo)|retaildemo|partner"},
+    "xiaomi":   {"aliases": ["mi", "mi tv", "redmi"], "os": "Android TV / Google TV (PatchWall)", "adb": true,
+                 "bloat": "xiaomi\\.(mitv|ad|upgrade|statistic)|mitv\\.|patchwall|miui\\.(analytics|msa)"},
+    "hisense":  {"aliases": ["vidaa"], "os": "VIDAA / Google TV (depends on model)", "adb": "partial",
+                 "note_en": "ADB only works on Google TV models; VIDAA models have no ADB.",
+                 "note_pl": "ADB dziala tylko na modelach z Google TV; modele z VIDAA nie maja ADB.",
+                 "bloat": "hisense\\.(ad|promo|demo|market)|retaildemo|partner"},
+    "tv-box":   {"aliases": ["box", "mi box", "shield", "x96", "chromecast"], "os": "Android TV / Google TV", "adb": true,
+                 "bloat": "retaildemo|partner|promo"},
+    "firetv":   {"aliases": ["amazon", "fire tv", "fire stick"], "os": "Fire OS", "adb": true,
+                 "bloat": "amazon\\.(device\\.sync|dcp|ags|aiv\\.demo|alta|ftv\\.promo)|tv\\.partner|retaildemo"},
+    "samsung":  {"aliases": ["tizen"], "os": "Tizen", "adb": false,
+                 "note_en": "No ADB. Options: Developer Mode + Tizen Studio (sdb), or network-level ad blocking (Pi-hole).",
+                 "note_pl": "Brak ADB. Opcje: Developer Mode + Tizen Studio (sdb) albo blokada reklam na poziomie sieci (Pi-hole)."},
+    "lg":       {"aliases": ["webos"], "os": "webOS", "adb": false,
+                 "note_en": "No ADB. Options: Developer Mode + webOS CLI (ares), Homebrew Channel (root), or Pi-hole.",
+                 "note_pl": "Brak ADB. Opcje: Developer Mode + webOS CLI (ares), Homebrew Channel (root) albo Pi-hole."},
+    "roku":     {"aliases": [], "os": "Roku OS", "adb": false,
+                 "note_en": "No ADB. You can limit ads in the privacy settings and with Pi-hole.",
+                 "note_pl": "Brak ADB. Reklamy ograniczysz w ustawieniach prywatnosci i przez Pi-hole."},
+    "android-tv": {"aliases": ["android", "google tv", "unknown", "nieznana", "nie wiem", "tv"], "os": "Android TV / Google TV", "adb": true,
+                 "bloat": "retaildemo|demosupport|partner|promo|analytics|statistic"}
+  }
+}
