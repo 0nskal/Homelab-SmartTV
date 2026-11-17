@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/icon.svg" width="128" height="128" alt="Homelab - SmartTV icon"></p>
+<p align="center"><img src="assets/icon.png" width="128" height="128" alt="Homelab - SmartTV icon"></p>
 
 # Homelab - SmartTV
 
@@ -44,7 +44,7 @@ Pull requests only, with screenshots for visible changes and a Conventional Comm
 
 ---
 
-<p align="center"><img src="assets/icon.svg" width="128" height="128" alt="Ikona Homelab - SmartTV"></p>
+<p align="center"><img src="assets/icon.png" width="128" height="128" alt="Ikona Homelab - SmartTV"></p>
 
 # Homelab - SmartTV
 
