@@ -24,6 +24,9 @@ Format: **Problem** → cause → fix.
 ## Performance
 
 - **YouTube/streaming stutters even at low resolution** → usually the Wi-Fi link, not the system. On a weak SoC, VP9/AV1 and 4K/60 are heavy. With 1.4 GB RAM and full swap everything is slow → test the network first, lower the quality, reboot.
+- **Launcher animation is choppy or the remote feels laggy** → weak GPU and full swap. Set the animation scales to 0.5, force-stop apps that linger in the background (`adb shell am force-stop <package>`), reboot after days of uptime. The launcher already throttles its background while you navigate; to remove the cost completely set a `wallpaper` in `config.js` (static image, no animation).
+- **Tuya tile says "no connection"** → the IoT Core service of your developer project expired (free tier is time-limited, renew it in the console), or the keys in `launcher/assets/tuya.json` are wrong, or the TV has no internet.
+- **A smart plug ignores commands (cloud says success, state does not change)** → the plug itself (weak Wi-Fi, firmware). Check that it reacts from the Tuya Smart app; sending commands one at a time helps, which the "all on/off" button already does, with verification and up to two retries.
 - **`TotalTime: 0`** → invalid measurement (app already in foreground) → close the app, retry.
 
 ## After changes
@@ -70,6 +73,9 @@ Format: **Problem** → przyczyna → rozwiązanie.
 ## Wydajność
 
 - **YouTube/streaming się tnie nawet w niskiej rozdzielczości** → zwykle winne jest łącze Wi-Fi, nie system. Na słabym SoC VP9/AV1 i 4K/60 są ciężkie. Przy 1.4 GB RAM i pełnym swapie wszystko zwalnia → najpierw sprawdź sieć, obniż jakość, zrestartuj TV.
+- **Animacja launchera się tnie albo pilot ma opóźnienie** → słaby GPU i pełny swap. Ustaw skale animacji na 0.5, zamknij aplikacje zalegające w tle (`adb shell am force-stop <pakiet>`), zrestartuj TV po kilku dniach pracy. Launcher sam zwalnia tło podczas nawigacji; żeby całkiem usunąć koszt, ustaw `wallpaper` w `config.js` (statyczny obraz, bez animacji).
+- **Kafelek Tuya pokazuje „brak połączenia”** → wygasła usługa IoT Core w projekcie deweloperskim (darmowa jest czasowa, odnów w konsoli), albo klucze w `launcher/assets/tuya.json` są błędne, albo TV nie ma internetu.
+- **Gniazdko ignoruje polecenia (chmura mówi „sukces”, stan się nie zmienia)** → wina gniazdka (słabe Wi-Fi, firmware). Sprawdź, czy reaguje z aplikacji Tuya Smart; pomaga wysyłanie poleceń po jednym, co robi przycisk „włącz/wyłącz wszystko” z weryfikacją i dwoma ponowieniami.
 - **`TotalTime: 0`** → nieważny pomiar (aplikacja już na pierwszym planie) → zamknij aplikację, powtórz.
 
 ## Po zmianach
