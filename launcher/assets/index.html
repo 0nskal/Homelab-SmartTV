@@ -53,7 +53,7 @@
   @media (prefers-reduced-motion: reduce){ #row .tile { transition:none; } }
 
   /* lights widget (Tuya, optional) */
-  #lights { position:absolute; right:112px; top:84px; display:flex; gap:24px; }
+  #lights { position:absolute; right:112px; top:84px; width:798px; display:flex; flex-wrap:wrap; gap:24px; }
   .tile.light { width:250px; height:128px; flex-direction:row; justify-content:flex-start; gap:20px; padding:0 26px; border-radius:36px; }
   .tile.light::after { border-radius:36px; }
   .tile.light .bulb { width:58px; height:58px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center;
@@ -65,6 +65,10 @@
   .tile.light .lt { display:flex; flex-direction:column; gap:4px; min-width:0; }
   .tile.light .lt b { font-size:28px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tile.light .lt span { font-size:22px; opacity:.6; }
+  .tile.lightall { width:100%; height:64px; flex-direction:row; border-radius:32px; background:rgba(40,37,39,.4); opacity:.8; }
+  .tile.lightall::after { border-radius:32px; }
+  .tile.lightall span { font-size:24px; font-weight:300; letter-spacing:.5px; }
+  .tile.lightall:focus { transform:scale(1.02); opacity:1; }
   .tile.light.err .lt span { color:#ff8a70; opacity:1; }
 
   /* siatka wszystkich aplikacji */
@@ -111,10 +115,10 @@
   var C = window.CONFIG || {};
   var LANG = ((C.lang && C.lang !== "auto") ? C.lang : (navigator.language || "en")).slice(0, 2) === "pl" ? "pl" : "en";
   var TXT = {
-    en: { on: "on", off: "off", offline: "no connection", all: "All apps", loading: "…", today: "today", asOf: "as of", sun: "Sunny", clear: "Clear", mostlySun: "Mostly sunny",
+    en: { on: "on", off: "off", offline: "no connection", allOn: "Turn all on", allOff: "Turn all off", all: "All apps", loading: "…", today: "today", asOf: "as of", sun: "Sunny", clear: "Clear", mostlySun: "Mostly sunny",
           mostlyClear: "Mostly clear", partly: "Partly cloudy", overcast: "Overcast", fog: "Fog", drizzle: "Drizzle", rain: "Rain",
           snow: "Snow", showers: "Showers", snowShowers: "Snow showers", storm: "Thunderstorm", cloudy: "Cloudy" },
-    pl: { on: "włączone", off: "wyłączone", offline: "brak połączenia", all: "Wszystkie aplikacje", loading: "…", today: "dziś", asOf: "stan z", sun: "Słonecznie", clear: "Bezchmurnie",
+    pl: { on: "włączone", off: "wyłączone", offline: "brak połączenia", allOn: "Włącz wszystko", allOff: "Wyłącz wszystko", all: "Wszystkie aplikacje", loading: "…", today: "dziś", asOf: "stan z", sun: "Słonecznie", clear: "Bezchmurnie",
           mostlySun: "Przeważnie słonecznie", mostlyClear: "Przeważnie bezchmurnie", partly: "Częściowe zachmurzenie",
           overcast: "Pochmurno", fog: "Mgła", drizzle: "Mżawka", rain: "Deszcz", snow: "Śnieg", showers: "Przelotny deszcz",
           snowShowers: "Przelotny śnieg", storm: "Burza", cloudy: "Zachmurzenie" }
@@ -261,23 +265,52 @@
       t.querySelector("b").textContent = d.name;
       lights.appendChild(t);
     });
+    var all = document.createElement("div");
+    all.className = "tile lightall"; all.tabIndex = 0; all.dataset.lightall = "1";
+    all.innerHTML = "<span></span>"; lights.appendChild(all); paintAll();
     refreshLights();
   }
   function refreshLights() {
-    Array.prototype.forEach.call(lights.children, function (t) {
+    Array.prototype.forEach.call(lights.querySelectorAll(".light"), function (t) {
       tuya("GET", "/v1.0/iot-03/devices/" + t.dataset.light + "/status", null, function (r) {
         if (!r || !r.success) { paintLight(t, false, true); return; }
         var on = false; r.result.forEach(function (x) { if (x.code === t.dataset.code) on = !!x.value; });
-        paintLight(t, on, false);
+        paintLight(t, on, false); paintAll();
       });
     });
   }
-  function toggleLight(t) {
-    var want = !t.dataset.on; paintLight(t, want, false);
+  function anyOn() { return Array.prototype.some.call(lights.querySelectorAll(".light"), function (t) { return !!t.dataset.on; }); }
+  function paintAll() { var b = lights.querySelector(".lightall"); if (b) b.firstChild.textContent = anyOn() ? TXT.allOff : TXT.allOn; }
+  function toggleAll() {
+    var want = !anyOn();
+    var all = Array.prototype.slice.call(lights.querySelectorAll(".light"));
+    // commands one by one with a gap, then verify and retry: some plugs drop commands
+    all.forEach(function (t, i) { setTimeout(function () { sendLight(t, want); }, i * 900); });
+    var tries = 0;
+    (function verify() {
+      setTimeout(function () {
+        var left = all.length, bad = [];
+        all.forEach(function (t) {
+          tuya("GET", "/v1.0/iot-03/devices/" + t.dataset.light + "/status", null, function (r) {
+            var on = null; if (r && r.success) r.result.forEach(function (x) { if (x.code === t.dataset.code) on = !!x.value; });
+            if (on !== null && on !== want) bad.push(t);
+            if (on !== null) paintLight(t, on, false);
+            if (--left === 0) {
+              paintAll();
+              if (bad.length && ++tries <= 2) { bad.forEach(function (t2, k) { setTimeout(function () { sendLight(t2, want); }, k * 900); }); verify(); }
+            }
+          });
+        });
+      }, all.length * 900 + 4000);
+    })();
+  }
+  function sendLight(t, want) {
+    paintLight(t, want, false); paintAll();
     tuya("POST", "/v1.0/iot-03/devices/" + t.dataset.light + "/commands", { commands: [{ code: t.dataset.code, value: want }] }, function (r) {
-      if (!r || !r.success) paintLight(t, !want, true);
+      if (!r || !r.success) { paintLight(t, !want, true); paintAll(); }
     });
   }
+  function toggleLight(t) { sendLight(t, !t.dataset.on); }
 
   var installed = null;
   function getApps() {
@@ -324,6 +357,7 @@
     if (!t) return;
     if (t.dataset.all) { openApps(); return; }
     if (t.dataset.light) { toggleLight(t); return; }
+    if (t.dataset.lightall) { toggleAll(); return; }
     if (A && t.dataset.pkg) A.launch(t.dataset.pkg);
   }
 
@@ -332,9 +366,16 @@
     if (apps.classList.contains("on")) return Array.prototype.slice.call(gridin.children);
     return Array.prototype.slice.call(row.children).concat(Array.prototype.slice.call(lights.children));
   }
+  var lastLight = null;
   function move(dir) {
     var cur = document.activeElement, list = scopeTiles();
     if (!cur || list.indexOf(cur) < 0) { if (list[0]) list[0].focus(); return; }
+    // lights widget: DOWN from a tile goes to the "all on/off" button, UP goes back
+    if (cur.dataset.light && dir === "D") { var ab = lights.querySelector(".lightall"); if (ab) { lastLight = cur; ab.focus(); return; } }
+    if (cur.dataset.lightall) {
+      if (dir === "U") { (lastLight || lights.querySelector(".light")).focus(); return; }
+      if (dir === "L" || dir === "R") return;
+    }
     var c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2;
     var best = null, bs = 1e12;
     list.forEach(function (t) {
