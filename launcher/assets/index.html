@@ -432,7 +432,10 @@
    it pauses while the all-apps grid is open and draws less often while you navigate with the remote. */
 (function(){
   var c=document.getElementById('wave'),x=c.getContext('2d'),W=640,H=360,SC=640/960,apps=document.getElementById('apps');
-  if(window.CONFIG&&window.CONFIG.wallpaper){c.style.display='none';return;}
+  if(window.CONFIG&&window.CONFIG.wallpaper){   // own wallpaper: no animation, keep a text shade over it
+    c.style.display='none';
+    var sh=document.createElement('div');sh.style.cssText='position:absolute;inset:0;background:linear-gradient(90deg,rgba(15,23,42,.8) 0%,rgba(15,23,42,.4) 38%,rgba(15,23,42,0) 70%),linear-gradient(0deg,rgba(15,23,42,.7) 0%,rgba(15,23,42,.3) 22%,rgba(15,23,42,0) 52%)';
+    document.getElementById('bg').appendChild(sh);return;}
   var cs=getComputedStyle(document.documentElement),ACC=(cs.getPropertyValue('--acc-rgb')||'34,211,238').trim(),CRM=(cs.getPropertyValue('--cream-rgb')||'248,250,252').trim(),BG=(cs.getPropertyValue('--bg')||'#0F172A').trim();
   var SP=[[0,1,.13,.09,7],[2,4,.09,.12,6],[4,2,.11,.07,8],[1,5,.07,.1,5],[3,0,.1,.08,6.5],[5,3,.06,.11,4.5]];
   var COLS=72,ROWS=28,NB=8,t0=Date.now();
