@@ -281,14 +281,18 @@
   }
   function anyOn() { return Array.prototype.some.call(lights.querySelectorAll(".light"), function (t) { return !!t.dataset.on; }); }
   function paintAll() { var b = lights.querySelector(".lightall"); if (b) b.firstChild.textContent = anyOn() ? TXT.allOff : TXT.allOn; }
+  var allGen = 0, allAt = 0;
   function toggleAll() {
-    var want = !anyOn();
+    if (Date.now() - allAt < 2500) return;          // ignore double presses / key repeat
+    allAt = Date.now();
+    var gen = ++allGen, want = !anyOn();
     var all = Array.prototype.slice.call(lights.querySelectorAll(".light"));
     // commands one by one with a gap, then verify and retry: some plugs drop commands
-    all.forEach(function (t, i) { setTimeout(function () { sendLight(t, want); }, i * 900); });
+    all.forEach(function (t, i) { setTimeout(function () { if (gen === allGen) sendLight(t, want); }, i * 900); });
     var tries = 0;
     (function verify() {
       setTimeout(function () {
+        if (gen !== allGen) return;                 // a newer press owns the lights now
         var left = all.length, bad = [];
         all.forEach(function (t) {
           tuya("GET", "/v1.0/iot-03/devices/" + t.dataset.light + "/status", null, function (r) {
@@ -296,8 +300,8 @@
             if (on !== null && on !== want) bad.push(t);
             if (on !== null) paintLight(t, on, false);
             if (--left === 0) {
-              paintAll();
-              if (bad.length && ++tries <= 2) { bad.forEach(function (t2, k) { setTimeout(function () { sendLight(t2, want); }, k * 900); }); verify(); }
+              paintAll(); if (gen !== allGen) return;
+              if (bad.length && ++tries <= 2) { bad.forEach(function (t2, k) { setTimeout(function () { if (gen === allGen) sendLight(t2, want); }, k * 900); }); verify(); }
             }
           });
         });
@@ -404,7 +408,7 @@
     var k = e.keyCode;
     if (k === 37) move("L"); else if (k === 39) move("R");
     else if (k === 38) move("U"); else if (k === 40) move("D");
-    else if (k === 13 || k === 23) activate(document.activeElement);
+    else if (k === 13 || k === 23) { if (!e.repeat) activate(document.activeElement); }
     else if (k === 27 || k === 4) { onBack(); }
     else return;
     e.preventDefault();
