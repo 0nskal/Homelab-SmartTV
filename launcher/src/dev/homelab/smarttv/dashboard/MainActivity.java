@@ -23,6 +23,12 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -93,6 +99,60 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() { /* nic */ }
 
+    // ---------------- Tuya Cloud (switching smart plugs, optional) ----------------
+    private String tuyaToken = ""; private long tuyaExp = 0; private JSONObject tuyaCfg;
+
+    private JSONObject tuyaConfig() throws Exception {
+        if (tuyaCfg == null) {
+            InputStream in = getAssets().open("tuya.json");
+            ByteArrayOutputStream o = new ByteArrayOutputStream(); byte[] b = new byte[2048]; int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+            in.close(); tuyaCfg = new JSONObject(o.toString("UTF-8"));
+        }
+        return tuyaCfg;
+    }
+    private static String hex(byte[] d) { StringBuilder sb = new StringBuilder(); for (byte x : d) sb.append(String.format("%02x", x)); return sb.toString(); }
+    private String tuyaHttp(String method, String path, String body, String tok) throws Exception {
+        JSONObject c = tuyaConfig();
+        String t = String.valueOf(System.currentTimeMillis());
+        String bodyHash = hex(MessageDigest.getInstance("SHA-256").digest((body == null ? "" : body).getBytes("UTF-8")));
+        String sts = method + "\n" + bodyHash + "\n\n" + path;
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(c.getString("secret").getBytes("UTF-8"), "HmacSHA256"));
+        String sign = hex(mac.doFinal((c.getString("id") + tok + t + sts).getBytes("UTF-8"))).toUpperCase(Locale.ROOT);
+        HttpURLConnection h = (HttpURLConnection) new URL(c.getString("host") + path).openConnection();
+        h.setConnectTimeout(8000); h.setReadTimeout(8000); h.setRequestMethod(method);
+        h.setRequestProperty("client_id", c.getString("id")); h.setRequestProperty("sign", sign);
+        h.setRequestProperty("t", t); h.setRequestProperty("sign_method", "HMAC-SHA256");
+        h.setRequestProperty("Content-Type", "application/json");
+        if (tok.length() > 0) h.setRequestProperty("access_token", tok);
+        if (body != null) { h.setDoOutput(true); h.getOutputStream().write(body.getBytes("UTF-8")); }
+        InputStream in = h.getResponseCode() >= 400 ? h.getErrorStream() : h.getInputStream();
+        ByteArrayOutputStream o = new ByteArrayOutputStream(); byte[] b = new byte[2048]; int n;
+        while ((n = in.read(b)) > 0) o.write(b, 0, n);
+        return o.toString("UTF-8");
+    }
+    private synchronized String tuyaTok() throws Exception {
+        if (tuyaToken.length() > 0 && System.currentTimeMillis() < tuyaExp) return tuyaToken;
+        JSONObject r = new JSONObject(tuyaHttp("GET", "/v1.0/token?grant_type=1", null, ""));
+        JSONObject res = r.getJSONObject("result");
+        tuyaToken = res.getString("access_token");
+        tuyaExp = System.currentTimeMillis() + (res.getLong("expire_time") - 120) * 1000L;
+        return tuyaToken;
+    }
+    /** The result comes back asynchronously przez window.onTuya(reqId, json). */
+    private void tuyaAsync(final String reqId, final String method, final String path, final String body) {
+        new Thread(new Runnable() { @Override public void run() {
+            String out;
+            try {
+                String r = tuyaHttp(method, path, body, tuyaTok());
+                if (r.contains("token invalid") || r.contains("1010")) { tuyaToken = ""; r = tuyaHttp(method, path, body, tuyaTok()); }
+                out = r;
+            } catch (Exception ex) { out = "{\"success\":false,\"msg\":\"" + String.valueOf(ex.getMessage()).replace("\"", "'") + "\"}"; }
+            js("window.onTuya && onTuya(" + JSONObject.quote(reqId) + "," + JSONObject.quote(out) + ")");
+        }}).start();
+    }
+
     private void js(final String code) {
         runOnUiThread(new Runnable() {
             @Override public void run() { if (web != null) web.evaluateJavascript(code, null); }
@@ -106,6 +166,16 @@ public class MainActivity extends Activity {
             Intent i = pm.getLeanbackLaunchIntentForPackage(pkg);
             if (i == null) i = pm.getLaunchIntentForPackage(pkg);
             return i;
+        }
+
+        @JavascriptInterface
+        public String tuyaConfig() {
+            try { JSONObject c = new JSONObject(MainActivity.this.tuyaConfig().toString()); c.remove("secret"); c.remove("id"); return c.toString(); }
+            catch (Exception ex) { return ""; }
+        }
+        @JavascriptInterface
+        public void tuya(String reqId, String method, String path, String body) {
+            tuyaAsync(reqId, method, path, (body == null || body.length() == 0) ? null : body);
         }
 
         @JavascriptInterface

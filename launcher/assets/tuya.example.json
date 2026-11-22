@@ -1,0 +1,2 @@
+{"id":"TUYA_ACCESS_ID","secret":"TUYA_ACCESS_SECRET","host":"https://openapi.tuyaeu.com",
+ "devices":[{"id":"DEVICE_ID","name":"Lamp","code":"switch"}]}
