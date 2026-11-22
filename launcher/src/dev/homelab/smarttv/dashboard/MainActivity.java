@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
                 Drawable d = pm.getApplicationIcon(ai);
                 if (d == null) d = pm.getApplicationBanner(ai);
                 if (d == null) return "";
-                int size = 192;
+                int size = 160;
                 Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
                 Canvas c = new Canvas(bmp);
                 d.setBounds(0, 0, size, size);

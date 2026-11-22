@@ -14,10 +14,6 @@
   #stage { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; overflow:hidden; background:var(--bg); }
   #bg { position:absolute; inset:0; background:var(--bg) center/cover no-repeat; }
   #wave { width:100%; height:100%; display:block; }
-  #shade { position:absolute; inset:0;
-    background:
-      linear-gradient(90deg, rgba(15,23,42,.8) 0%, rgba(15,23,42,.4) 38%, rgba(15,23,42,0) 70%),
-      linear-gradient(0deg, rgba(15,23,42,.55) 0%, rgba(15,23,42,.25) 22%, rgba(15,23,42,0) 45%); }
 
   #info { position:absolute; left:112px; top:70px; }
   #clock { font-size:230px; line-height:1; font-weight:100; letter-spacing:-4px; color:var(--cream); font-variant-numeric:tabular-nums; }
@@ -83,7 +79,7 @@
 </head>
 <body>
 <div id="stage">
-  <div id="bg"><canvas id="wave" width="960" height="540"></canvas></div><div id="shade"></div>
+  <div id="bg"><canvas id="wave" width="960" height="540"></canvas></div>
 
   <div id="info">
     <div id="clock">--:--</div>
@@ -405,7 +401,7 @@
     }
   }
   document.addEventListener("keydown", function (e) {
-    var k = e.keyCode;
+    var k = e.keyCode; if (window.waveSlow) waveSlow();
     if (k === 37) move("L"); else if (k === 39) move("R");
     else if (k === 38) move("U"); else if (k === 40) move("D");
     else if (k === 13 || k === 23) { if (!e.repeat) activate(document.activeElement); }
@@ -431,49 +427,56 @@
 })();
 </script>
 <script>
-/* background: waving perspective dot grid with drifting accent patches (canvas 960x540, scaled) */
+/* background: waving perspective dot grid with drifting accent patches, drawn on a 640x360 canvas and scaled up.
+   Tuned for weak TV GPUs: dots are bucketed by colour, the side/bottom shade is drawn into the canvas (fewer layers to composite),
+   it pauses while the all-apps grid is open and draws less often while you navigate with the remote. */
 (function(){
-  var c=document.getElementById('wave'),x=c.getContext('2d'),W=960,H=540;
-  var cs=getComputedStyle(document.documentElement),ACC=cs.getPropertyValue('--acc-rgb').trim()||'34,211,238',CRM=cs.getPropertyValue('--cream-rgb').trim()||'248,250,252';
-  if(window.CONFIG&&window.CONFIG.wallpaper){c.style.display='none';return;}   // own wallpaper replaces the animation
+  var c=document.getElementById('wave'),x=c.getContext('2d'),W=640,H=360,SC=640/960,apps=document.getElementById('apps');
+  if(window.CONFIG&&window.CONFIG.wallpaper){c.style.display='none';return;}
+  var cs=getComputedStyle(document.documentElement),ACC=(cs.getPropertyValue('--acc-rgb')||'34,211,238').trim(),CRM=(cs.getPropertyValue('--cream-rgb')||'248,250,252').trim(),BG=(cs.getPropertyValue('--bg')||'#0F172A').trim();
   var SP=[[0,1,.13,.09,7],[2,4,.09,.12,6],[4,2,.11,.07,8],[1,5,.07,.1,5],[3,0,.1,.08,6.5],[5,3,.06,.11,4.5]];
-  var COLS=96,ROWS=34,t0=Date.now();
-  function h(u,v,t){ // wysokość fali
-    return Math.sin(u*2.1+t*.55)*.55+Math.sin(v*1.7-t*.4+u*.8)*.45+Math.sin((u+v)*1.1+t*.3)*.3;
-  }
+  var COLS=72,ROWS=28,NB=8,t0=Date.now();
+  // buckets: [0..NB-1] light by alpha, [NB..2NB-1] accent by alpha
+  var styles=[],buf=[];
+  for(var b=0;b<NB;b++){styles.push('rgba('+CRM+','+((b+1)/NB).toFixed(2)+')');}
+  for(b=0;b<NB;b++){styles.push('rgba('+ACC+','+((b+1)/NB).toFixed(2)+')');}
+  for(b=0;b<2*NB;b++)buf.push(new Float32Array(COLS*ROWS*3));
+  var cnt=new Int32Array(2*NB);
+  // fixed per-dot randomness
+  var HS=new Float32Array(COLS*ROWS);
+  for(var r0=0;r0<ROWS;r0++)for(var q0=0;q0<COLS;q0++){var v=Math.sin(q0*12.9898+r0*78.233)*43758.5453;HS[r0*COLS+q0]=v-Math.floor(v);}
+  function h(u,v,t){return Math.sin(u*2.1+t*.55)*.55+Math.sin(v*1.7-t*.4+u*.8)*.45+Math.sin((u+v)*1.1+t*.3)*.3;}
+  var CU=new Float32Array(SP.length),CR=new Float32Array(SP.length);
+  var bm=/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(BG),BGR=bm?parseInt(bm[1],16)+','+parseInt(bm[2],16)+','+parseInt(bm[3],16):'15,23,42';
+  var gL=x.createLinearGradient(0,0,W,0);gL.addColorStop(0,'rgba('+BGR+',.8)');gL.addColorStop(.38,'rgba('+BGR+',.4)');gL.addColorStop(.7,'rgba('+BGR+',0)');
+  var gB=x.createLinearGradient(0,H,0,0);gB.addColorStop(0,'rgba('+BGR+',.55)');gB.addColorStop(.22,'rgba('+BGR+',.25)');gB.addColorStop(.45,'rgba('+BGR+',0)');
   function frame(){
-    var t=(Date.now()-t0)/1000;
-    x.clearRect(0,0,W,H);
-    var CU=[],CR=[];for(var k0=0;k0<SP.length;k0++){CU[k0]=Math.sin(t*SP[k0][2]+SP[k0][0])*1.1;CR[k0]=ROWS*(.5+.4*Math.sin(t*SP[k0][3]+SP[k0][1]));}
-    for(var r=ROWS-1;r>=0;r--){          // far to near
-      var z=r/(ROWS-1);                  // 0 far, 1 near
-      var depth=1/(1.05-z*.9);           // perspective
-      var sc=1.0+z*.9;
-      var baseY=H*.34+Math.pow(z,1.35)*H*.72;
-      for(var q=0;q<COLS;q++){
-        var u=(q/(COLS-1)-.5)*2;
-        var hh=h(u*3,r*.35,t);
-        var px=W/2+u*W*.56*sc;
-        var py=baseY-hh*(8+z*46);
-        if(px<-4||px>W+4||py>H+4) continue;
-        var a=Math.min(1,z*1.6)*(.5+.5*(hh+1)/2.2);
-        var rad=.6+z*2.1+Math.max(0,hh)*.5;
-        var hs=Math.sin(q*12.9898+r*78.233)*43758.5453; hs-=Math.floor(hs);   // random 0..1 per dot
-        var heat=0;                                                          // patches drift over the surface
-        for(var k=0;k<SP.length;k++){
-          var cu=CU[k], cr=CR[k];
-          var dd=Math.hypot((u-cu)*9,(r-cr)*.9);
-          heat=Math.max(heat,1-dd/SP[k][4]);
-        }
-        var hot=heat>.05 && hs<heat*1.05 && z>.05;
-        if(hot){ rad*=.7+hs*1.3; a=Math.min(1,a+.4); }
-        x.fillStyle=hot?'rgba('+ACC+','+Math.min(1,a+.3)+')':'rgba('+CRM+','+a.toFixed(2)+')';
-        x.fillRect(px-rad,py-rad,rad*2,rad*2);
+    var t=(Date.now()-t0)/1000,k,r,q;
+    for(k=0;k<SP.length;k++){CU[k]=Math.sin(t*SP[k][2]+SP[k][0])*1.1;CR[k]=ROWS*(.5+.4*Math.sin(t*SP[k][3]+SP[k][1]));}
+    for(k=0;k<2*NB;k++)cnt[k]=0;
+    for(r=ROWS-1;r>=0;r--){
+      var z=r/(ROWS-1),sc=1+z*.9,baseY=H*.34+Math.pow(z,1.35)*H*.72,amp=(8+z*46)*SC,za=Math.min(1,z*1.6);
+      for(q=0;q<COLS;q++){
+        var u=(q/(COLS-1)-.5)*2,hh=h(u*3,r*.35,t),px=W/2+u*W*.56*sc,py=baseY-hh*amp;
+        if(px<-4||px>W+4||py>H+4)continue;
+        var a=za*(.5+.5*(hh+1)/2.2),rad=(.6+z*1.7+(hh>0?hh*.4:0))*SC,hs=HS[r*COLS+q],heat=0;
+        for(k=0;k<SP.length;k++){var dd=Math.sqrt((u-CU[k])*(u-CU[k])*81+(r-CR[k])*(r-CR[k])*.81),hv=1-dd/SP[k][4];if(hv>heat)heat=hv;}
+        var hot=heat>.05&&hs<heat*1.05&&z>.05;
+        if(hot){rad*=.7+hs*1.3;a=Math.min(1,a+.7);}
+        var bk=Math.min(NB-1,Math.max(0,Math.floor(a*NB)))+(hot?NB:0),arr=buf[bk],n=cnt[bk];
+        arr[n]=px-rad;arr[n+1]=py-rad;arr[n+2]=rad*2;cnt[bk]=n+3;
       }
     }
+    x.fillStyle=BG;x.fillRect(0,0,W,H);
+    for(k=0;k<2*NB;k++){var m=cnt[k];if(!m)continue;x.fillStyle=styles[k];var a2=buf[k];for(var i=0;i<m;i+=3)x.fillRect(a2[i],a2[i+1],a2[i+2],a2[i+2]);}
+    x.fillStyle=gL;x.fillRect(0,0,W,H);x.fillStyle=gB;x.fillRect(0,0,W,H);   // shade under the clock and tiles
   }
-  var last=0;
-  (function loop(n){ if(n-last>40){ last=n; frame(); } requestAnimationFrame(loop); })(0);
+  var last=0,slowUntil=0;
+  window.waveSlow=function(){slowUntil=performance.now()+700;};   // while navigating: fewer background frames, smoother UI
+  (function loop(n){
+    if(!document.hidden&&!apps.classList.contains('on')&&n-last>(n<slowUntil?125:41)){last=n;frame();}
+    requestAnimationFrame(loop);
+  })(0);
 })();
 </script>
 </body>
